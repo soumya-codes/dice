@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/pprof"
+	"runtime/trace"
 	"sync"
 	"syscall"
 
@@ -35,11 +37,13 @@ func init() {
 	flag.IntVar(&config.KeysLimit, "keys-limit", config.KeysLimit, "keys limit for the dice server. "+
 		"This flag controls the number of keys each shard holds at startup. You can multiply this number with the "+
 		"total number of shard threads to estimate how much memory will be required at system start up.")
+	flag.BoolVar(&config.EnableProfiling, "enable-profiling", false, "run server in multithreading mode")
 	flag.Parse()
 
 	config.SetupConfig()
 }
 
+//nolint:funlen
 func main() {
 	logr := logger.New(logger.Opts{WithTimestamp: true})
 	slog.SetDefault(logr)
@@ -153,6 +157,61 @@ func main() {
 			}
 		}()
 	} else {
+		if config.EnableProfiling {
+			// Start CPU profiling
+			cpuFile, err := os.Create("cpu.prof")
+			if err != nil {
+				logr.Warn("could not create file cpu.prof: ", slog.Any("error", err))
+			}
+			defer cpuFile.Close()
+
+			if err = pprof.StartCPUProfile(cpuFile); err != nil {
+				logr.Warn("could not start CPU profile: ", slog.Any("error", err))
+			}
+			defer pprof.StopCPUProfile()
+
+			// Start memory profiling
+			memFile, err := os.Create("mem.prof")
+			if err != nil {
+				logr.Warn("could not create file mem.prof: ", slog.Any("error", err))
+			}
+
+			// Ensure all profiling data is written before exiting
+			defer func() {
+				runtime.GC()
+				if err = pprof.WriteHeapProfile(memFile); err != nil {
+					logr.Warn("could not write memory profile: ", slog.Any("error", err))
+				}
+
+				memFile.Close()
+			}()
+
+			// Start block profiling
+			runtime.SetBlockProfileRate(1)
+			defer func() {
+				blockFile, err := os.Create("block.prof")
+				if err != nil {
+					logr.Warn("could not create block profile: ", slog.Any("error", err))
+				}
+				defer blockFile.Close()
+				if err := pprof.Lookup("block").WriteTo(blockFile, 0); err != nil {
+					logr.Warn("could not write block profile: ", slog.Any("error", err))
+				}
+			}()
+
+			// Start execution trace
+			traceFile, err := os.Create("trace.out")
+			if err != nil {
+				logr.Warn("could not create trace output file: ", slog.Any("error", err))
+			}
+			defer traceFile.Close()
+
+			if err := trace.Start(traceFile); err != nil {
+				logr.Warn("could not start trace: ", slog.Any("error", err))
+			}
+			defer trace.Stop()
+		}
+
 		workerManager := worker.NewWorkerManager(config.DiceConfig.Server.MaxClients, shardManager)
 		// Initialize the RESP Server
 		respServer := resp.NewServer(shardManager, workerManager, cmdWatchChan, serverErrCh, logr)

@@ -48,6 +48,8 @@ var (
 	InitConfigCmd = false
 
 	KeysLimit = DefaultKeysLimit
+
+	EnableProfiling = false
 )
 
 type Config struct {
@@ -73,6 +75,7 @@ type Config struct {
 		StoreMapInitSize       int           `mapstructure:"storemapinitsize"`
 		WatchChanBufSize       int           `mapstructure:"watchchanbufsize"`
 		AdhocReqChanBufSize    int           `mapstructure:"adhocreqchanbufsize"`
+		EnableProfiling        bool          `mapstructure:"profiling"`
 	} `mapstructure:"server"`
 	Auth struct {
 		UserName string `mapstructure:"username"`
@@ -108,6 +111,7 @@ var baseConfig = Config{
 		StoreMapInitSize       int           `mapstructure:"storemapinitsize"`
 		WatchChanBufSize       int           `mapstructure:"watchchanbufsize"`
 		AdhocReqChanBufSize    int           `mapstructure:"adhocreqchanbufsize"`
+		EnableProfiling        bool          `mapstructure:"profiling"`
 	}{
 		Addr:                   DefaultHost,
 		Port:                   DefaultPort,
@@ -130,6 +134,7 @@ var baseConfig = Config{
 		StoreMapInitSize:       1024000,
 		WatchChanBufSize:       20000,
 		AdhocReqChanBufSize:    20, // assuming we wouldn't have more than 20 adhoc requests being sent at a time.
+		EnableProfiling:        false,
 	},
 	Auth: struct {
 		UserName string `mapstructure:"username"`
